@@ -22,5 +22,12 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     outputs = process_pdf(args.pdf_path, output_dir=args.output_dir)
-    for path in [outputs.canonical_pdf, outputs.main_jpg, outputs.email_jpg, outputs.pptx]:
+    for path in [
+        outputs.canonical_pdf,
+        outputs.main_jpg,
+        outputs.email_jpg,
+        outputs.ppt_working_pdf,
+        outputs.ppt_working_ai,
+        outputs.pptx,
+    ]:
         print(path)

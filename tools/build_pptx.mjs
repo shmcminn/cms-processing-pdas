@@ -140,17 +140,51 @@ function addTitleSlide(pptx, payload) {
 }
 
 function addImageSlides(pptx, payload) {
-  for (const imagePath of payload.slide_images) {
+  for (const slideSpec of payload.slide_specs) {
     const slide = pptx.addSlide();
     addChrome(slide);
-    const { aspectRatio } = getImageDimensions(imagePath);
+    let imageTop = 1.24;
+    if (slideSpec.title) {
+      slide.addText(slideSpec.title, autoFontSize(slideSpec.title, "Arial Black", {
+        x: 1.0,
+        y: 1.18,
+        w: 8.75,
+        h: 0.42,
+        fontSize: 18,
+        minFontSize: 14,
+        maxFontSize: 20,
+        bold: true,
+        color: "111111",
+        margin: 0,
+        valign: "top",
+        fit: "shrink",
+      }));
+      imageTop = 1.82;
+    }
+    if (slideSpec.subtitle) {
+      slide.addText(slideSpec.subtitle, autoFontSize(slideSpec.subtitle, "Arial", {
+        x: 1.0,
+        y: 1.68,
+        w: 8.75,
+        h: 0.24,
+        fontSize: 10.5,
+        minFontSize: 9.5,
+        maxFontSize: 11.5,
+        color: "444444",
+        margin: 0,
+        valign: "top",
+        fit: "shrink",
+      }));
+      imageTop = 2.02;
+    }
+    const { aspectRatio } = getImageDimensions(slideSpec.image_path);
     const width = 9.0;
-    const maxHeight = 5.45;
+    const maxHeight = 7.12 - imageTop;
     const height = Math.min(maxHeight, width / aspectRatio);
     slide.addImage({
-      path: imagePath,
+      path: slideSpec.image_path,
       x: 1.0,
-      y: 1.24,
+      y: imageTop,
       w: width,
       h: height,
     });

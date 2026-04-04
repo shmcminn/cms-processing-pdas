@@ -6,7 +6,7 @@ from pathlib import Path
 
 import fitz
 
-from .models import Metadata
+from .models import CropRegion, Metadata
 
 
 @dataclass(slots=True)
@@ -173,6 +173,42 @@ def _extract_source(text: str, title: str) -> str:
             source_tail = source_tail[: min(cut_positions)]
         return re.sub(r"\s+", " ", source_tail).strip(" .")
     return ""
+
+
+def extract_source_from_blocks(blocks: list[TextBlock]) -> str:
+    for block in sorted(blocks, key=lambda item: item.y0, reverse=True):
+        if "Source:" not in block.text:
+            continue
+        source_text = block.text.split("Source:", 1)[1]
+        if "Note:" in source_text:
+            source_text = source_text.split("Note:", 1)[0]
+        return re.sub(r"\s+", " ", source_text).strip(" .")
+    return ""
+
+
+def extract_overlay_text(blocks: list[TextBlock], region: CropRegion) -> tuple[str, str, float]:
+    region_blocks = [
+        block
+        for block in blocks
+        if region.start_pt - 3 <= block.y0 <= min(region.start_pt + 90, region.end_pt)
+        and block.x0 < 120
+        and len(block.text) <= 180
+    ]
+    if not region_blocks:
+        return "", "", region.start_pt
+
+    title_block = region_blocks[0]
+    title = title_block.text
+    subtitle = ""
+    crop_start = title_block.y1 + 12
+
+    if len(region_blocks) > 1:
+        candidate = region_blocks[1]
+        if candidate.y0 - title_block.y1 <= 24 and len(candidate.text) <= 220:
+            subtitle = candidate.text
+            crop_start = candidate.y1 + 12
+
+    return title, subtitle, crop_start
 
 
 def slugify(text: str) -> str:

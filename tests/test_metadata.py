@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pro_data_analysis.pdf_extract import extract_metadata, load_page_text
+from pro_data_analysis.pdf_extract import extract_metadata, extract_source_from_blocks, load_page_text
 
 
 def test_extracts_metadata_from_dhs_pdf() -> None:
@@ -10,3 +10,8 @@ def test_extracts_metadata_from_dhs_pdf() -> None:
     assert metadata.last_name == "SONI"
     assert metadata.date_mmddyyyy == "04/02/2026"
     assert metadata.stem == "20260402-where-the-dhs-shutdown-hit-hardest-soni"
+
+
+def test_extracts_source_from_bottom_note_block() -> None:
+    page_text = load_page_text(Path("test_cases/in-iran-us-strikes-another-blow-to-chinas-oil-suppliers.pdf"))
+    assert extract_source_from_blocks(page_text.blocks) == "Kpler"

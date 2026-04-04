@@ -28,4 +28,13 @@ class OutputPaths:
     canonical_pdf: Path
     main_jpg: Path
     email_jpg: Path
+    ppt_working_pdf: Path
+    ppt_working_ai: Path
     pptx: Path
+
+
+@dataclass(slots=True)
+class SlideSpec:
+    image_path: Path
+    title: str = ""
+    subtitle: str = ""

@@ -7,6 +7,8 @@ This pipeline turns a finished Pro Data Analysis PDF into the CMS handoff files 
 - Canonical PDF copy named `YYYYMMDD-slug-lastname.pdf`
 - Main JPEG named `YYYYMMDD-slug-lastname.jpg`
 - Email JPEG named `EMAIL-YYYYMMDD-slug-lastname.jpg`
+- PowerPoint working PDF named `PPT-YYYYMMDD-slug-lastname.pdf`
+- Illustrator-compatible working file named `PPT-YYYYMMDD-slug-lastname.ai`
 - PowerPoint deck named `YYYYMMDD-slug-lastname.pptx`
 
 ## Run it
@@ -22,6 +24,8 @@ Run the pipeline on one PDF:
 ```bash
 uv run pro-data-analysis test_cases/where-the-dhs-shutdown-hit-hardest.pdf
 ```
+
+The working PowerPoint PDF and Illustrator-compatible `.ai` copy are generated from the same slide payload as the `.pptx`, so they do not depend on Acrobat or Illustrator automation.
 
 ## Install the Finder Quick Action
 

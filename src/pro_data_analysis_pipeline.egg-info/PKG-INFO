@@ -1,8 +1,0 @@
-Metadata-Version: 2.4
-Name: pro-data-analysis-pipeline
-Version: 0.1.0
-Summary: Generate CMS handoff files from finished Pro Data Analysis PDFs.
-Requires-Python: >=3.11
-Requires-Dist: numpy>=2.3.0
-Requires-Dist: Pillow>=11.0.0
-Requires-Dist: PyMuPDF>=1.26.0
