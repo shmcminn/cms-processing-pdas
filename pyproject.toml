@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pro-data-analysis-pipeline"
+version = "0.1.0"
+description = "Generate CMS handoff files from finished Pro Data Analysis PDFs."
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=2.3.0",
+  "Pillow>=11.0.0",
+  "PyMuPDF>=1.26.0",
+]
+
+[project.scripts]
+pro-data-analysis = "pro_data_analysis.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

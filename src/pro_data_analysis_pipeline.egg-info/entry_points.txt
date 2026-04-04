@@ -1,0 +1,2 @@
+[console_scripts]
+pro-data-analysis = pro_data_analysis.cli:main

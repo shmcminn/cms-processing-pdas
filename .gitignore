@@ -1,0 +1,7 @@
+.DS_Store
+.npm-cache/
+.pytest_cache/
+.venv/
+__pycache__/
+node_modules/
+*.pyc

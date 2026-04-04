@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+src/pro_data_analysis/__init__.py
+src/pro_data_analysis/cli.py
+src/pro_data_analysis/images.py
+src/pro_data_analysis/models.py
+src/pro_data_analysis/pdf_extract.py
+src/pro_data_analysis/pipeline.py
+src/pro_data_analysis/ppt.py
+src/pro_data_analysis_pipeline.egg-info/PKG-INFO
+src/pro_data_analysis_pipeline.egg-info/SOURCES.txt
+src/pro_data_analysis_pipeline.egg-info/dependency_links.txt
+src/pro_data_analysis_pipeline.egg-info/entry_points.txt
+src/pro_data_analysis_pipeline.egg-info/requires.txt
+src/pro_data_analysis_pipeline.egg-info/top_level.txt
+tests/test_metadata.py
