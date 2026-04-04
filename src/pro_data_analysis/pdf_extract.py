@@ -87,6 +87,18 @@ def content_start_pt(page_text: PageText) -> float:
     return min(page_text.height - 100, max(block.y1 for block in top_blocks) + 20)
 
 
+def content_end_pt(page_text: PageText) -> float:
+    footer_blocks = [
+        block
+        for block in page_text.blocks
+        if block.y0 > page_text.height - 120
+        and block.text.strip().lower() == "data analysis"
+    ]
+    if footer_blocks:
+        return max(200.0, min(block.y0 for block in footer_blocks) - 12)
+    return page_text.height - 24.0
+
+
 def _pick_title_block(blocks: list[TextBlock]) -> TextBlock | None:
     candidates = [
         block
@@ -193,6 +205,7 @@ def extract_overlay_text(blocks: list[TextBlock], region: CropRegion) -> tuple[s
         if region.start_pt - 3 <= block.y0 <= min(region.start_pt + 90, region.end_pt)
         and block.x0 < 120
         and len(block.text) <= 180
+        and ((block.x1 - block.x0) > 220 or len(block.text) >= 40)
     ]
     if not region_blocks:
         return "", "", region.start_pt

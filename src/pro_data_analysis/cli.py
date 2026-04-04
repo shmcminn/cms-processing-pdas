@@ -28,6 +28,8 @@ def main() -> None:
         outputs.email_jpg,
         outputs.ppt_working_pdf,
         outputs.ppt_working_ai,
+        outputs.ppt_assets_dir,
+        outputs.ppt_segments_json,
         outputs.pptx,
     ]:
         print(path)

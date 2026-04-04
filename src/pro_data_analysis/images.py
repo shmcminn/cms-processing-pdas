@@ -35,6 +35,20 @@ def save_email_jpeg(main_image: Image.Image, output_path: Path) -> None:
 
 
 def find_slide_regions(page_text: PageText, analysis_image: Image.Image, content_start: float) -> list[CropRegion]:
+    return find_slide_regions_with_bottom(
+        page_text=page_text,
+        analysis_image=analysis_image,
+        content_start=content_start,
+        bottom=page_text.height - 24.0,
+    )
+
+
+def find_slide_regions_with_bottom(
+    page_text: PageText,
+    analysis_image: Image.Image,
+    content_start: float,
+    bottom: float,
+) -> list[CropRegion]:
     grayscale = np.asarray(analysis_image.convert("L"))
     ink = (grayscale < 245).mean(axis=1)
     kernel = np.ones(35) / 35
@@ -46,7 +60,6 @@ def find_slide_regions(page_text: PageText, analysis_image: Image.Image, content
     min_slice = 300.0
     ideal_slice = 430.0
     max_slice = 520.0
-    bottom = page_text.height - 24.0
     current = content_start
     regions: list[CropRegion] = []
 

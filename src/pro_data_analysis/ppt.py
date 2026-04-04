@@ -48,6 +48,8 @@ def build_pptx(
         cwd=REPO_ROOT,
         check=True,
     )
+    if payload_path.exists():
+        payload_path.unlink()
 
 
 def export_working_files(metadata: Metadata, slide_specs: list[SlideSpec], ppt_pdf_path: Path, ai_copy_path: Path) -> None:

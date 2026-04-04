@@ -30,6 +30,8 @@ class OutputPaths:
     email_jpg: Path
     ppt_working_pdf: Path
     ppt_working_ai: Path
+    ppt_assets_dir: Path
+    ppt_segments_json: Path
     pptx: Path
 
 
