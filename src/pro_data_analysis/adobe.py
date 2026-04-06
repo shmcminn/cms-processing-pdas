@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import fcntl
 import json
 import subprocess
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from .models import Metadata
@@ -9,6 +12,14 @@ from .models import Metadata
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TMP_ROOT = REPO_ROOT / "tmp" / "automation"
 TEMPLATE_PATH = REPO_ROOT / "052025-data-analysis-PPT-template.ait"
+ADOBE_LOCK_PATH = TMP_ROOT / "adobe-automation.lock"
+ADOBE_LOCK_TIMEOUT_SECONDS = 30
+ILLUSTRATOR_TIMEOUT_SECONDS = 180
+ACROBAT_TIMEOUT_SECONDS = 300
+
+
+class AdobeAutomationError(RuntimeError):
+    """Raised when Illustrator or Acrobat automation fails."""
 
 
 def prepare_ppt_ai(metadata: Metadata, source_pdf: Path, output_ai: Path) -> None:
@@ -26,54 +37,135 @@ def prepare_ppt_ai(metadata: Metadata, source_pdf: Path, output_ai: Path) -> Non
         "source": metadata.source,
     }
     script = _prepare_script(payload)
-    _run_illustrator_javascript(script)
+    with _adobe_automation_lock():
+        _run_illustrator_javascript(
+            script,
+            operation="prepare the working Illustrator deck",
+            timeout_seconds=ILLUSTRATOR_TIMEOUT_SECONDS,
+        )
+        _wait_for_output(output_ai, operation="write the working Illustrator deck")
 
 
 def export_ai_to_pdf_and_pptx(input_ai: Path, output_pdf: Path, output_pptx: Path) -> None:
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
     TMP_ROOT.mkdir(parents=True, exist_ok=True)
     illustrator_script = _export_pdf_script({"input_ai": str(input_ai.resolve()), "output_pdf": str(output_pdf.resolve())})
-    _run_illustrator_javascript(illustrator_script)
+    with _adobe_automation_lock():
+        _run_illustrator_javascript(
+            illustrator_script,
+            operation="export the Illustrator deck to PDF",
+            timeout_seconds=ILLUSTRATOR_TIMEOUT_SECONDS,
+        )
+        _wait_for_output(output_pdf, operation="finish the Illustrator PDF export")
 
-    acrobat_script = _export_pptx_script({"input_pdf": str(output_pdf.resolve()), "output_pptx": str(output_pptx.resolve())})
-    _run_acrobat_javascript(acrobat_script)
+        if output_pptx.exists():
+            output_pptx.unlink()
+        acrobat_script = _export_pptx_script({"input_pdf": str(output_pdf.resolve()), "output_pptx": str(output_pptx.resolve())})
+        _run_acrobat_javascript(
+            acrobat_script,
+            operation="convert the PDF deck to PowerPoint in Acrobat",
+            timeout_seconds=ACROBAT_TIMEOUT_SECONDS,
+        )
+        _wait_for_output(output_pptx, operation="finish the Acrobat PowerPoint export", timeout_seconds=30)
 
 
-def _run_illustrator_javascript(script: str) -> None:
+@contextmanager
+def _adobe_automation_lock():
+    TMP_ROOT.mkdir(parents=True, exist_ok=True)
+    with ADOBE_LOCK_PATH.open("w") as lock_file:
+        deadline = time.monotonic() + ADOBE_LOCK_TIMEOUT_SECONDS
+        while True:
+            try:
+                fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as exc:
+                if time.monotonic() >= deadline:
+                    raise AdobeAutomationError(
+                        "Another Pro Data Analysis Adobe automation run is already in progress. "
+                        "Wait for it to finish, then rerun this command."
+                    ) from exc
+                time.sleep(0.5)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+
+def _run_illustrator_javascript(script: str, operation: str, timeout_seconds: int) -> None:
     script_path = TMP_ROOT / "illustrator-current.jsx"
     script_path.write_text(script)
     applescript = f'''
 set jsSource to do shell script "cat {script_path}"
-tell application "Adobe Illustrator"
-  activate
-  return do javascript jsSource
-end tell
+with timeout of {timeout_seconds} seconds
+  tell application "Adobe Illustrator"
+    activate
+    return do javascript jsSource
+  end tell
+end timeout
 '''
-    subprocess.run(
-        ["osascript", "-e", applescript],
-        cwd=REPO_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
+    _run_applescript(
+        applescript=applescript,
+        app_name="Adobe Illustrator",
+        operation=operation,
+        timeout_seconds=timeout_seconds + 15,
     )
 
 
-def _run_acrobat_javascript(script: str) -> None:
+def _run_acrobat_javascript(script: str, operation: str, timeout_seconds: int) -> None:
     script_path = TMP_ROOT / "acrobat-current.js"
     script_path.write_text(script)
     applescript = f'''
 set jsSource to do shell script "cat {script_path}"
-tell application "Adobe Acrobat"
-  activate
-  return do script jsSource
-end tell
+with timeout of {timeout_seconds} seconds
+  tell application "Adobe Acrobat"
+    activate
+    return do script jsSource
+  end tell
+end timeout
 '''
-    subprocess.run(
-        ["osascript", "-e", applescript],
-        cwd=REPO_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
+    _run_applescript(
+        applescript=applescript,
+        app_name="Adobe Acrobat",
+        operation=operation,
+        timeout_seconds=timeout_seconds + 15,
+    )
+
+
+def _run_applescript(applescript: str, app_name: str, operation: str, timeout_seconds: int) -> None:
+    try:
+        subprocess.run(
+            ["osascript", "-e", applescript],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AdobeAutomationError(
+            f"{app_name} took too long to {operation}. "
+            f"Check {app_name} for modal dialogs or stalled conversion windows, then rerun the command."
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        details = " ".join(
+            part.strip()
+            for part in [exc.stdout or "", exc.stderr or ""]
+            if part and part.strip()
+        )
+        if not details:
+            details = f"{app_name} returned exit code {exc.returncode}."
+        raise AdobeAutomationError(f"{app_name} could not {operation}. {details}") from exc
+
+
+def _wait_for_output(output_path: Path, operation: str, timeout_seconds: int = 15) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if output_path.exists() and output_path.stat().st_size > 0:
+            return
+        time.sleep(0.5)
+    raise AdobeAutomationError(
+        f"Adobe finished running but did not {operation}. "
+        f"Expected output file: {output_path}"
     )
 
 
@@ -171,7 +263,6 @@ var templateDoc = app.open(new File(payload.template_path));
 var saveOptions = new IllustratorSaveOptions();
 saveOptions.pdfCompatible = true;
 saveOptions.embedICCProfile = false;
-templateDoc.saveAs(new File(payload.output_ai), saveOptions);
 var headlineSize = payload.title.length > 110 ? 24 : (payload.title.length > 80 ? 26 : (payload.title.length > 60 ? 28 : 30));
 var titleFrame = replaceFrameContents(templateDoc, "Single-line headline goes here 30 pt", payload.title, headlineSize);
 var longTitleFrame = null;
@@ -231,8 +322,8 @@ var arial = findFont();
 applyArial(stagedGroup, arial);
 
 sourceDoc.close(SaveOptions.DONOTSAVECHANGES);
-templateDoc.save();
-templateDoc.close(SaveOptions.SAVECHANGES);
+templateDoc.saveAs(new File(payload.output_ai), saveOptions);
+templateDoc.close(SaveOptions.DONOTSAVECHANGES);
 "ok";
 """
 
@@ -246,7 +337,7 @@ try {{
   opts.artboardRange = "1-" + doc.artboards.length;
 }} catch (e) {{}}
 doc.saveAs(new File(payload.output_pdf), opts);
-doc.close(SaveOptions.SAVECHANGES);
+doc.close(SaveOptions.DONOTSAVECHANGES);
 "ok";
 """
 

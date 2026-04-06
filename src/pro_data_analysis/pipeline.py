@@ -36,7 +36,18 @@ def process_pdf(pdf_path: Path, output_dir: Path | None = None) -> OutputPaths:
     save_email_jpeg(main_image, email_jpg)
 
     if not ppt_working_ai.exists():
-        prepare_ppt_ai(metadata, pdf_path, ppt_working_ai)
+        try:
+            prepare_ppt_ai(metadata, pdf_path, ppt_working_ai)
+        except Exception as exc:
+            _write_workflow_state(
+                workflow_state,
+                phase="failed_initial_build",
+                metadata=metadata,
+                source_pdf=pdf_path,
+                output_ai=ppt_working_ai,
+                error=str(exc),
+            )
+            raise
         _write_workflow_state(
             workflow_state,
             phase="awaiting_manual_layout",
@@ -53,7 +64,20 @@ def process_pdf(pdf_path: Path, output_dir: Path | None = None) -> OutputPaths:
         )
 
     _ensure_manual_layout_is_saved(ppt_working_ai, workflow_state)
-    export_ai_to_pdf_and_pptx(ppt_working_ai, ppt_working_pdf, pptx_path)
+    try:
+        export_ai_to_pdf_and_pptx(ppt_working_ai, ppt_working_pdf, pptx_path)
+    except Exception as exc:
+        _write_workflow_state(
+            workflow_state,
+            phase="failed_export",
+            metadata=metadata,
+            source_pdf=pdf_path,
+            output_ai=ppt_working_ai,
+            output_pdf=ppt_working_pdf if ppt_working_pdf.exists() else None,
+            output_pptx=pptx_path if pptx_path.exists() else None,
+            error=str(exc),
+        )
+        raise
     _write_workflow_state(
         workflow_state,
         phase="exported",
@@ -102,6 +126,7 @@ def _write_workflow_state(
     output_ai: Path,
     output_pdf: Path | None = None,
     output_pptx: Path | None = None,
+    error: str | None = None,
 ) -> None:
     payload = {
         "phase": phase,
@@ -115,5 +140,6 @@ def _write_workflow_state(
         else None,
         "ppt_working_pdf": str(output_pdf.resolve()) if output_pdf else None,
         "pptx": str(output_pptx.resolve()) if output_pptx else None,
+        "error": error,
     }
     workflow_state.write_text(json.dumps(payload, indent=2))
