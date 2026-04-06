@@ -32,7 +32,7 @@ Then:
 3. Save the AI file
 4. Rerun the same command on the original source PDF
 
-The rerun is blocked until the working AI file has a newer save time. The workflow JSON also records any Adobe automation failure so you can see whether the first pass failed in Illustrator or the export failed in Acrobat.
+The rerun is blocked until the working AI file has a newer save time, and it also checks that at least one content slide changed from the untouched template. The workflow JSON records those slide fingerprints plus any Adobe automation failure so you can see whether the first pass failed in Illustrator or the export failed in Acrobat.
 
 ## Install the Finder Quick Action
 

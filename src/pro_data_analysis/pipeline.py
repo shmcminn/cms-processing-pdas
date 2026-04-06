@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from datetime import datetime, UTC
 from pathlib import Path
+
+import fitz
 
 from .adobe import export_ai_to_pdf_and_pptx, prepare_ppt_ai
 from .images import render_pdf_page, save_email_jpeg, save_main_jpeg
@@ -117,6 +120,15 @@ def _ensure_manual_layout_is_saved(ppt_working_ai: Path, workflow_state: Path) -
             "Open the PPT AI file, move content onto the slide artboards, save it, then rerun the same command."
         )
 
+    recorded_fingerprints = state.get("content_slide_fingerprints")
+    if recorded_fingerprints:
+        current_fingerprints = _content_slide_fingerprints(ppt_working_ai)
+        if current_fingerprints == recorded_fingerprints:
+            raise RuntimeError(
+                "The working PPT Illustrator file was saved, but the content slides still match the untouched template. "
+                "Move the staged content from off-artboard onto at least one slide artboard, save the AI file, then rerun the command."
+            )
+
 
 def _write_workflow_state(
     workflow_state: Path,
@@ -134,6 +146,9 @@ def _write_workflow_state(
         "source_pdf": str(source_pdf.resolve()),
         "ppt_working_ai": str(output_ai.resolve()),
         "ppt_working_ai_mtime": output_ai.stat().st_mtime if output_ai.exists() else None,
+        "content_slide_fingerprints": _content_slide_fingerprints(output_ai)
+        if output_ai.exists() and phase in {"awaiting_manual_layout", "failed_export", "exported"}
+        else None,
         "canonical_stem": metadata.stem,
         "manual_step": "Open the PPT AI file, move chart/content from the off-artboard source group onto the slide artboards, save the AI file, then rerun the same command on the original PDF."
         if phase == "awaiting_manual_layout"
@@ -143,3 +158,16 @@ def _write_workflow_state(
         "error": error,
     }
     workflow_state.write_text(json.dumps(payload, indent=2))
+
+
+def _content_slide_fingerprints(pdf_compatible_ai: Path) -> list[str]:
+    doc = fitz.open(pdf_compatible_ai)
+    fingerprints: list[str] = []
+    try:
+        for page_index in range(1, doc.page_count):
+            page = doc.load_page(page_index)
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(0.25, 0.25), colorspace=fitz.csGRAY, alpha=False)
+            fingerprints.append(hashlib.sha1(pixmap.samples).hexdigest())
+    finally:
+        doc.close()
+    return fingerprints
