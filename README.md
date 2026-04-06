@@ -7,19 +7,15 @@ This pipeline turns a finished Pro Data Analysis PDF into the CMS handoff files 
 - Canonical PDF copy named `YYYYMMDD-slug-lastname.pdf`
 - Main JPEG named `YYYYMMDD-slug-lastname.jpg`
 - Email JPEG named `EMAIL-YYYYMMDD-slug-lastname.jpg`
+- PowerPoint working Illustrator file named `PPT-YYYYMMDD-slug-lastname.ai`
+- Workflow state file named `PPT-YYYYMMDD-slug-lastname.workflow.json`
+
+After the manual layout step and rerun:
+
 - PowerPoint working PDF named `PPT-YYYYMMDD-slug-lastname.pdf`
-- Illustrator-compatible working file named `PPT-YYYYMMDD-slug-lastname.ai`
-- PowerPoint deck named `YYYYMMDD-slug-lastname.pptx`
-- PowerPoint slide asset folder named `PPT-YYYYMMDD-slug-lastname-assets/`
-- Slide segmentation manifest named `PPT-YYYYMMDD-slug-lastname.segments.json`
+- Final PowerPoint named `YYYYMMDD-slug-lastname.pptx`
 
 ## Run it
-
-Install JavaScript dependencies once:
-
-```bash
-npm install
-```
 
 Run the pipeline on one PDF:
 
@@ -27,11 +23,14 @@ Run the pipeline on one PDF:
 uv run pro-data-analysis test_cases/where-the-dhs-shutdown-hit-hardest.pdf
 ```
 
-The working PowerPoint PDF and Illustrator-compatible `.ai` copy are generated from the same slide payload as the `.pptx`, so they do not depend on Acrobat or Illustrator automation.
+On the first run, the script creates the working `PPT-...ai` from the Illustrator template, fills slide 1, and places the original PDF content off-artboard with fonts forced to Arial.
 
-## Adjusting slide splits
+Then:
 
-If the automatic PowerPoint slide splits are close but not perfect, edit `PPT-...segments.json` and rerun the command. The pipeline reuses that file on the next run, and it keeps the cropped slide images in `PPT-...-assets/` so the deck is easier to tweak by hand.
+1. Open `PPT-...ai`
+2. Move the staged chart/content from off-artboard onto the slide artboards
+3. Save the AI file
+4. Rerun the same command on the original source PDF
 
 ## Install the Finder Quick Action
 

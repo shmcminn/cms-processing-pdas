@@ -6,7 +6,7 @@ from pathlib import Path
 
 import fitz
 
-from .models import CropRegion, Metadata
+from .models import Metadata
 
 
 @dataclass(slots=True)
@@ -57,7 +57,9 @@ def extract_metadata(page_text: PageText) -> Metadata:
     last_name = _pick_last_name(byline)
     dek = _extract_dek(page_text.blocks, byline_block)
     title = title_block.text if title_block else "Untitled data analysis"
-    source = _extract_source(page_text.raw_text, title)
+    note, source = extract_note_and_source_from_blocks(page_text.blocks)
+    if not source:
+        source = _extract_source(page_text.raw_text, title)
     slug = slugify(title)
     stem = f"{yyyymmdd(date_mmddyyyy)}-{slug}-{slugify(last_name)}"
     return Metadata(
@@ -65,38 +67,12 @@ def extract_metadata(page_text: PageText) -> Metadata:
         byline=byline,
         date_mmddyyyy=date_mmddyyyy,
         dek=dek,
+        note=note,
         source=source,
         slug=slug,
         last_name=last_name,
         stem=stem,
     )
-
-
-def content_start_pt(page_text: PageText) -> float:
-    top_blocks = [
-        block
-        for block in page_text.blocks
-        if block.y0 < 305
-        and len(block.text) > 20
-        and not block.text.upper().startswith("SOURCE:")
-        and block.x0 < 90
-        and (block.x1 - block.x0) > page_text.width * 0.7
-    ]
-    if not top_blocks:
-        return 280.0
-    return min(page_text.height - 100, max(block.y1 for block in top_blocks) + 20)
-
-
-def content_end_pt(page_text: PageText) -> float:
-    footer_blocks = [
-        block
-        for block in page_text.blocks
-        if block.y0 > page_text.height - 120
-        and block.text.strip().lower() == "data analysis"
-    ]
-    if footer_blocks:
-        return max(200.0, min(block.y0 for block in footer_blocks) - 12)
-    return page_text.height - 24.0
 
 
 def _pick_title_block(blocks: list[TextBlock]) -> TextBlock | None:
@@ -188,40 +164,26 @@ def _extract_source(text: str, title: str) -> str:
 
 
 def extract_source_from_blocks(blocks: list[TextBlock]) -> str:
-    for block in sorted(blocks, key=lambda item: item.y0, reverse=True):
-        if "Source:" not in block.text:
+    return extract_note_and_source_from_blocks(blocks)[1]
+
+
+def extract_note_and_source_from_blocks(blocks: list[TextBlock]) -> tuple[str, str]:
+    note = ""
+    source = ""
+    bottom_blocks = sorted((block for block in blocks if block.y0 > 0), key=lambda item: item.y0, reverse=True)
+    for block in bottom_blocks:
+        text = re.sub(r"\s+", " ", block.text).strip()
+        if "Source:" not in text and "Note:" not in text:
             continue
-        source_text = block.text.split("Source:", 1)[1]
-        if "Note:" in source_text:
-            source_text = source_text.split("Note:", 1)[0]
-        return re.sub(r"\s+", " ", source_text).strip(" .")
-    return ""
-
-
-def extract_overlay_text(blocks: list[TextBlock], region: CropRegion) -> tuple[str, str, float]:
-    region_blocks = [
-        block
-        for block in blocks
-        if region.start_pt - 3 <= block.y0 <= min(region.start_pt + 90, region.end_pt)
-        and block.x0 < 120
-        and len(block.text) <= 180
-        and ((block.x1 - block.x0) > 220 or len(block.text) >= 40)
-    ]
-    if not region_blocks:
-        return "", "", region.start_pt
-
-    title_block = region_blocks[0]
-    title = title_block.text
-    subtitle = ""
-    crop_start = title_block.y1 + 12
-
-    if len(region_blocks) > 1:
-        candidate = region_blocks[1]
-        if candidate.y0 - title_block.y1 <= 24 and len(candidate.text) <= 220:
-            subtitle = candidate.text
-            crop_start = candidate.y1 + 12
-
-    return title, subtitle, crop_start
+        note_match = re.search(r"Note:\s*(.+?)(?=(?:Source:|$))", text, re.IGNORECASE)
+        source_match = re.search(r"Source:\s*(.+?)(?=(?:Note:|$))", text, re.IGNORECASE)
+        if note_match and not note:
+            note = note_match.group(1).strip(" .")
+        if source_match and not source:
+            source = source_match.group(1).strip(" .")
+        if note or source:
+            return note, source
+    return note, source
 
 
 def slugify(text: str) -> str:

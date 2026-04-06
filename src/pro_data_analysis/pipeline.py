@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import shutil
+from datetime import datetime, UTC
 from pathlib import Path
 
-from .images import find_slide_regions_with_bottom, render_pdf_page, save_crop, save_email_jpeg, save_main_jpeg
-from .models import CropRegion, OutputPaths, SlideSpec
-from .pdf_extract import content_end_pt, content_start_pt, extract_metadata, extract_overlay_text, extract_source_from_blocks, load_page_text
-from .ppt import build_pptx, export_working_files
+from .adobe import export_ai_to_pdf_and_pptx, prepare_ppt_ai
+from .images import render_pdf_page, save_email_jpeg, save_main_jpeg
+from .models import OutputPaths
+from .pdf_extract import extract_metadata, extract_note_and_source_from_blocks, load_page_text
 
 
 def process_pdf(pdf_path: Path, output_dir: Path | None = None) -> OutputPaths:
@@ -18,15 +19,14 @@ def process_pdf(pdf_path: Path, output_dir: Path | None = None) -> OutputPaths:
     output_dir.mkdir(parents=True, exist_ok=True)
     page_text = load_page_text(pdf_path)
     metadata = extract_metadata(page_text)
-    metadata.source = extract_source_from_blocks(page_text.blocks) or metadata.source
+    metadata.note, metadata.source = extract_note_and_source_from_blocks(page_text.blocks)
 
     canonical_pdf = output_dir / f"{metadata.stem}.pdf"
     main_jpg = output_dir / f"{metadata.stem}.jpg"
     email_jpg = output_dir / f"EMAIL-{metadata.stem}.jpg"
-    ppt_working_pdf = output_dir / f"PPT-{metadata.stem}.pdf"
     ppt_working_ai = output_dir / f"PPT-{metadata.stem}.ai"
-    ppt_assets_dir = output_dir / f"PPT-{metadata.stem}-assets"
-    ppt_segments_json = output_dir / f"PPT-{metadata.stem}.segments.json"
+    workflow_state = output_dir / f"PPT-{metadata.stem}.workflow.json"
+    ppt_working_pdf = output_dir / f"PPT-{metadata.stem}.pdf"
     pptx_path = output_dir / f"{metadata.stem}.pptx"
 
     shutil.copy2(pdf_path, canonical_pdf)
@@ -35,77 +35,85 @@ def process_pdf(pdf_path: Path, output_dir: Path | None = None) -> OutputPaths:
     save_main_jpeg(main_image, main_jpg)
     save_email_jpeg(main_image, email_jpg)
 
-    analysis_image = render_pdf_page(pdf_path, target_width=1800)
-    content_start = content_start_pt(page_text)
-    content_end = content_end_pt(page_text)
-    auto_regions = find_slide_regions_with_bottom(page_text, analysis_image, content_start, content_end)
-    regions = _load_or_write_regions(ppt_segments_json, auto_regions)
+    if not ppt_working_ai.exists():
+        prepare_ppt_ai(metadata, pdf_path, ppt_working_ai)
+        _write_workflow_state(
+            workflow_state,
+            phase="awaiting_manual_layout",
+            metadata=metadata,
+            source_pdf=pdf_path,
+            output_ai=ppt_working_ai,
+        )
+        return OutputPaths(
+            canonical_pdf=canonical_pdf,
+            main_jpg=main_jpg,
+            email_jpg=email_jpg,
+            ppt_working_ai=ppt_working_ai,
+            workflow_state=workflow_state,
+        )
 
-    ppt_assets_dir.mkdir(parents=True, exist_ok=True)
-    for existing_png in ppt_assets_dir.glob("slide-*.png"):
-        existing_png.unlink()
-
-    slide_specs: list[SlideSpec] = []
-    for index, region in enumerate(regions, start=2):
-        overlay_title, overlay_subtitle, crop_start = extract_overlay_text(page_text.blocks, region)
-        crop_path = ppt_assets_dir / f"slide-{index}.png"
-        adjusted_region = region
-        if crop_start > region.start_pt and crop_start < region.end_pt - 80:
-            adjusted_region = CropRegion(start_pt=crop_start, end_pt=region.end_pt, score=region.score)
-        save_crop(main_image, page_text.height, adjusted_region, crop_path)
-        slide_specs.append(SlideSpec(image_path=crop_path, title=overlay_title, subtitle=overlay_subtitle))
-
-    _write_region_manifest(ppt_segments_json, page_text.height, regions, slide_specs)
-    build_pptx(metadata, slide_specs, pptx_path, ppt_assets_dir)
-    export_working_files(metadata, slide_specs, ppt_working_pdf, ppt_working_ai)
-
+    _ensure_manual_layout_is_saved(ppt_working_ai, workflow_state)
+    export_ai_to_pdf_and_pptx(ppt_working_ai, ppt_working_pdf, pptx_path)
+    _write_workflow_state(
+        workflow_state,
+        phase="exported",
+        metadata=metadata,
+        source_pdf=pdf_path,
+        output_ai=ppt_working_ai,
+        output_pdf=ppt_working_pdf,
+        output_pptx=pptx_path,
+    )
     return OutputPaths(
         canonical_pdf=canonical_pdf,
         main_jpg=main_jpg,
         email_jpg=email_jpg,
-        ppt_working_pdf=ppt_working_pdf,
         ppt_working_ai=ppt_working_ai,
-        ppt_assets_dir=ppt_assets_dir,
-        ppt_segments_json=ppt_segments_json,
+        workflow_state=workflow_state,
+        ppt_working_pdf=ppt_working_pdf,
         pptx=pptx_path,
     )
 
 
-def _load_or_write_regions(segments_path: Path, auto_regions: list[CropRegion]) -> list[CropRegion]:
-    if not segments_path.exists():
-        return auto_regions
+def _ensure_manual_layout_is_saved(ppt_working_ai: Path, workflow_state: Path) -> None:
+    if not workflow_state.exists():
+        return
+    try:
+        state = json.loads(workflow_state.read_text())
+    except json.JSONDecodeError:
+        return
 
-    payload = json.loads(segments_path.read_text())
-    return [
-        CropRegion(
-            start_pt=float(item["start_pt"]),
-            end_pt=float(item["end_pt"]),
-            score=float(item.get("score", 1.0)),
+    recorded_mtime = state.get("ppt_working_ai_mtime")
+    if recorded_mtime is None:
+        return
+
+    current_mtime = ppt_working_ai.stat().st_mtime
+    if current_mtime <= float(recorded_mtime) + 1e-6:
+        raise RuntimeError(
+            "The working PPT Illustrator file has not changed since it was created. "
+            "Open the PPT AI file, move content onto the slide artboards, save it, then rerun the same command."
         )
-        for item in payload.get("regions", [])
-    ] or auto_regions
 
 
-def _write_region_manifest(
-    segments_path: Path,
-    page_height_pt: float,
-    regions: list[CropRegion],
-    slide_specs: list[SlideSpec],
+def _write_workflow_state(
+    workflow_state: Path,
+    phase: str,
+    metadata,
+    source_pdf: Path,
+    output_ai: Path,
+    output_pdf: Path | None = None,
+    output_pptx: Path | None = None,
 ) -> None:
     payload = {
-        "page_height_pt": page_height_pt,
-        "instructions": "Edit start_pt and end_pt if you want different slide splits, then rerun the pipeline.",
-        "regions": [
-            {
-                "slide_number": index + 2,
-                "start_pt": round(region.start_pt, 2),
-                "end_pt": round(region.end_pt, 2),
-                "score": round(region.score, 3),
-                "title": slide_specs[index].title,
-                "subtitle": slide_specs[index].subtitle,
-                "image_path": str(slide_specs[index].image_path),
-            }
-            for index, region in enumerate(regions)
-        ],
+        "phase": phase,
+        "updated_at": datetime.now(UTC).isoformat(),
+        "source_pdf": str(source_pdf.resolve()),
+        "ppt_working_ai": str(output_ai.resolve()),
+        "ppt_working_ai_mtime": output_ai.stat().st_mtime if output_ai.exists() else None,
+        "canonical_stem": metadata.stem,
+        "manual_step": "Open the PPT AI file, move chart/content from the off-artboard source group onto the slide artboards, save the AI file, then rerun the same command on the original PDF."
+        if phase == "awaiting_manual_layout"
+        else None,
+        "ppt_working_pdf": str(output_pdf.resolve()) if output_pdf else None,
+        "pptx": str(output_pptx.resolve()) if output_pptx else None,
     }
-    segments_path.write_text(json.dumps(payload, indent=2))
+    workflow_state.write_text(json.dumps(payload, indent=2))

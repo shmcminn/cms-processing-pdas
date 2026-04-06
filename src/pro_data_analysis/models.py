@@ -10,6 +10,7 @@ class Metadata:
     byline: str
     date_mmddyyyy: str
     dek: str
+    note: str
     source: str
     slug: str
     last_name: str
@@ -28,15 +29,7 @@ class OutputPaths:
     canonical_pdf: Path
     main_jpg: Path
     email_jpg: Path
-    ppt_working_pdf: Path
     ppt_working_ai: Path
-    ppt_assets_dir: Path
-    ppt_segments_json: Path
-    pptx: Path
-
-
-@dataclass(slots=True)
-class SlideSpec:
-    image_path: Path
-    title: str = ""
-    subtitle: str = ""
+    workflow_state: Path
+    ppt_working_pdf: Path | None = None
+    pptx: Path | None = None

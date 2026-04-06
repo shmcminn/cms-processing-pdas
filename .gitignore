@@ -4,5 +4,7 @@
 .venv/
 __pycache__/
 node_modules/
+scripts/run_quick_action.sh
+tmp/
 *.egg-info/
 *.pyc

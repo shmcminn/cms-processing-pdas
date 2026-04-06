@@ -22,9 +22,33 @@ if [[ -z "$PDF_PATH" ]]; then
 fi
 
 cd "$ROOT_DIR"
-OUTPUT="$(uv run pro-data-analysis "$PDF_PATH")"
-osascript -e 'display notification "Finished generating CMS files." with title "Pro Data Analysis"'
-open -R "${OUTPUT%%$'\n'*}"
+if ! OUTPUT="$(uv run pro-data-analysis "$PDF_PATH" 2>&1)"; then
+  ERROR_MESSAGE="$OUTPUT" osascript <<'APPLESCRIPT'
+on run
+  display dialog (system attribute "ERROR_MESSAGE") buttons {"OK"} default button 1 with icon caution
+end run
+APPLESCRIPT
+  exit 1
+fi
+
+lines=("${(@f)OUTPUT}")
+canonical_pdf="${lines[1]}"
+main_jpg="${lines[2]}"
+email_jpg="${lines[3]}"
+ppt_ai="${lines[4]}"
+workflow_json="${lines[5]}"
+ppt_pdf="${lines[6]:-}"
+pptx_path="${lines[7]:-}"
+
+phase="$(sed -n 's/.*"phase": "\\([^"]*\\)".*/\\1/p' "$workflow_json" | head -n 1)"
+
+if [[ "$phase" == "awaiting_manual_layout" ]]; then
+  osascript -e 'display notification "Working Illustrator file created. Finish the slide layout, save it, then run the Quick Action again." with title "Pro Data Analysis"'
+  open -R "$ppt_ai"
+else
+  osascript -e 'display notification "Finished generating CMS files." with title "Pro Data Analysis"'
+  open -R "${pptx_path:-$canonical_pdf}"
+fi
 EOF
 
 chmod +x "$RUNNER"
@@ -81,7 +105,7 @@ cat > "$CONTENTS_DIR/document.wflow" <<EOF
         <key>ActionParameters</key>
         <dict>
           <key>COMMAND_STRING</key>
-          <string>"$RUNNER" "$1"</string>
+          <string>"$RUNNER" "\$1"</string>
           <key>CheckedForUserDefaultShell</key>
           <true/>
           <key>inputMethod</key>
@@ -89,9 +113,9 @@ cat > "$CONTENTS_DIR/document.wflow" <<EOF
           <key>shell</key>
           <string>/bin/zsh</string>
           <key>source</key>
-          <string>for f in "$@"
+          <string>for f in "\$@"
 do
-  "$RUNNER" "$f"
+  "$RUNNER" "\$f"
 done</string>
         </dict>
         <key>BundleIdentifier</key>
