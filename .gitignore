@@ -5,6 +5,11 @@
 __pycache__/
 node_modules/
 scripts/run_quick_action.sh
+052025-data-analysis-PPT-template.ait
+instructions.pdf
+examples/
+test_cases/
+tests/
 tmp/
 *.egg-info/
 *.pyc
