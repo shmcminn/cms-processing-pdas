@@ -17,6 +17,15 @@ It is designed around a two-step PowerPoint workflow:
 
 The PowerPoint step depends on Illustrator and Acrobat automation. If either app is showing a modal dialog, recovery window, missing-font prompt, or menu state that blocks scripting, the run can fail until that is cleared.
 
+## Clone The Repo
+
+Clone the repo and move into the project folder:
+
+```bash
+git clone <repo-url>
+cd cms-processing
+```
+
 ## Quick Action Install
 
 To install the Finder Quick Action:
