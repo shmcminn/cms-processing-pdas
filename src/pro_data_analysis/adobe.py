@@ -132,9 +132,13 @@ end timeout
 
 
 def _run_applescript(applescript: str, app_name: str, operation: str, timeout_seconds: int) -> None:
+    script_lines = [line for line in applescript.splitlines() if line.strip()]
+    command = ["osascript"]
+    for line in script_lines:
+        command.extend(["-e", line])
     try:
         subprocess.run(
-            ["osascript", "-e", applescript],
+            command,
             cwd=REPO_ROOT,
             check=True,
             capture_output=True,
@@ -211,18 +215,22 @@ function moveFrameTop(tf, targetTop) {{
   tf.translate(0, targetTop - tf.geometricBounds[1]);
 }}
 function buildSourceText(note, source) {{
-  var parts = [];
+  var notePart = "";
+  var sourcePart = "";
   if (note) {{
     var cleanedNote = note.replace(/\\s+/g, " ").replace(/\\s+$/, "");
     if (cleanedNote && !/[.!?]$/.test(cleanedNote)) {{
       cleanedNote = cleanedNote + ".";
     }}
-    parts.push("Note: " + cleanedNote);
+    notePart = "Note: " + cleanedNote;
   }}
   if (source) {{
-    parts.push("Source: " + source.replace(/\\s+/g, " ").replace(/^\\s+|\\s+$/g, ""));
+    sourcePart = "Source: " + source.replace(/\\s+/g, " ").replace(/^\\s+|\\s+$/g, "");
   }}
-  return parts.join(" ");
+  if (notePart && sourcePart) {{
+    return notePart + "\\r" + sourcePart;
+  }}
+  return notePart || sourcePart;
 }}
 function removePlaceholderFrames(doc) {{
   var markers = [
