@@ -28,30 +28,96 @@ cd cms-processing
 
 ## Quick Action Install
 
-To install the Finder Quick Action:
+Install the Finder Quick Action from the repo root:
 
 ```bash
 zsh scripts/install_quick_action.sh
+killall Finder
 ```
 
 This creates:
 
-- a runner script at `scripts/run_quick_action.sh`
+- a debug runner script at `scripts/run_quick_action.sh`
 - a Finder Quick Action at `~/Library/Services/Pro Data Analysis.workflow`
+- a Quick Action registration file at `~/Library/Services/Pro Data Analysis.workflow/Contents/Info.plist`
+
+After running the installer, open System Settings and search for `Quick Actions` or `Extensions`. Confirm `Pro Data Analysis` is enabled for Finder Quick Actions or Services. The exact settings label varies by macOS version.
+
+### Reinstall Or Update The Quick Action
+
+Reinstall after any of these changes:
+
+- you moved the repo
+- you pulled a newer version of this repo
+- Finder shows an old error after the installer changed
+
+```bash
+zsh scripts/install_quick_action.sh
+killall Finder
+```
 
 ## Quick Action Use
 
 After installation:
 
-1. In Finder, right-click a PDF.
+1. In Finder, right-click a PDF file.
 2. Choose `Quick Actions`.
 3. Choose `Pro Data Analysis`.
+
+Use a real Finder file selection. Do not run it from a browser download row, Preview sidebar item, or another app's file list.
 
 Behavior:
 
 - On the first run, it creates the working Illustrator file and reveals it in Finder.
 - After you finish the manual layout and save the AI, run the Quick Action again on the original PDF.
 - On the second run, it exports the final PowerPoint files and reveals the finished output.
+
+If the first run creates JPG, AI, and workflow JSON files but still shows a macOS alert, treat the generated files as the source of truth. If the AI file exists, open it, complete the manual layout, save it, and run the Quick Action again on the original PDF.
+
+## Quick Action Troubleshooting
+
+Most Quick Action problems are fixed by reinstalling from the current repo and restarting Finder:
+
+```bash
+zsh scripts/install_quick_action.sh
+killall Finder
+```
+
+Then confirm `Pro Data Analysis` is enabled in System Settings under Quick Actions, Extensions, or Services.
+
+### Quick Action Still Does Not Appear
+
+Check these items in order:
+
+1. Confirm the workflow exists.
+
+```bash
+ls -la "$HOME/Library/Services/Pro Data Analysis.workflow/Contents"
+```
+
+You should see both `document.wflow` and `Info.plist`.
+
+2. Confirm the workflow files are valid.
+
+```bash
+plutil -lint "$HOME/Library/Services/Pro Data Analysis.workflow/Contents/document.wflow" \
+  "$HOME/Library/Services/Pro Data Analysis.workflow/Contents/Info.plist"
+```
+
+Both files should report `OK`.
+
+3. Make sure you are right-clicking a PDF file in Finder.
+
+### Quick Action Shows A macOS Error
+
+If macOS says the service is not configured correctly, cannot open `run_quick_action.sh`, or cannot read `PPT-...workflow.json`, the installed workflow is stale. Reinstall:
+
+```bash
+zsh scripts/install_quick_action.sh
+killall Finder
+```
+
+If the first-run output files already exist, do not delete them. Open the generated `PPT-...ai`, finish the manual layout, save it, and run the Quick Action again on the original PDF.
 
 ## What The Tool Generates
 
@@ -62,6 +128,8 @@ On the first run:
 - `EMAIL-YYYYMMDD-slug-lastname.jpg`
 - `PPT-YYYYMMDD-slug-lastname.ai`
 - `PPT-YYYYMMDD-slug-lastname.workflow.json`
+
+If the PDF text does not include a date, the tool looks for a leading date in the original filename, such as `20260128-file-name.pdf` or `2026-01-28-file-name.pdf`. If neither the PDF text nor the filename has a date, the output filenames start with `undated` and the deck date field is filled with `DATE TK`.
 
 On the second run, after the AI file has been edited and saved:
 

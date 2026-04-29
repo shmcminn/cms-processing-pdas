@@ -21,7 +21,7 @@ def process_pdf(pdf_path: Path, output_dir: Path | None = None) -> OutputPaths:
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     page_text = load_page_text(pdf_path)
-    metadata = extract_metadata(page_text)
+    metadata = extract_metadata(page_text, filename_stem=pdf_path.stem)
     metadata.note, metadata.source = extract_note_and_source_from_blocks(page_text.blocks)
 
     canonical_pdf = output_dir / f"{metadata.stem}.pdf"

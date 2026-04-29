@@ -9,7 +9,6 @@ scripts/run_quick_action.sh
 instructions.pdf
 examples/
 test_cases/
-tests/
 tmp/
 *.egg-info/
 *.pyc

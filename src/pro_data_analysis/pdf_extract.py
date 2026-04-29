@@ -27,7 +27,7 @@ class PageText:
 
 
 BYLINE_RE = re.compile(
-    r"\bBY\s+(?P<authors>.+?)(?:\s*\|\s*(?P<date>\d{2}/\d{2}/\d{4}))?(?:\b|$)",
+    r"\bBY\s+(?P<authors>[^|]+?)(?:\s*\|\s*(?P<date>\d{2}/\d{2}/\d{4}))?\s*$",
     re.IGNORECASE,
 )
 
@@ -49,10 +49,18 @@ def load_page_text(pdf_path: Path) -> PageText:
     )
 
 
-def extract_metadata(page_text: PageText) -> Metadata:
+def extract_metadata(page_text: PageText, filename_stem: str | None = None) -> Metadata:
     title_block = _pick_title_block(page_text.blocks)
     byline_block = _pick_byline_block(page_text.blocks)
     date_mmddyyyy = _extract_date(byline_block.text if byline_block else page_text.raw_text)
+    date_prefix = yyyymmdd(date_mmddyyyy) if date_mmddyyyy else None
+    if date_prefix is None and filename_stem:
+        date_prefix = _extract_date_prefix_from_filename(filename_stem)
+        if date_prefix:
+            date_mmddyyyy = _mmddyyyy(date_prefix)
+    if date_prefix is None:
+        date_prefix = "undated"
+        date_mmddyyyy = "DATE TK"
     byline = _extract_byline(byline_block.text if byline_block else page_text.raw_text)
     last_name = _pick_last_name(byline)
     dek = _extract_dek(page_text.blocks, byline_block)
@@ -61,7 +69,7 @@ def extract_metadata(page_text: PageText) -> Metadata:
     if not source:
         source = _extract_source(page_text.raw_text, title)
     slug = slugify(title)
-    stem = f"{yyyymmdd(date_mmddyyyy)}-{slug}-{slugify(last_name)}"
+    stem = f"{date_prefix}-{slug}-{slugify(last_name)}"
     return Metadata(
         title=title,
         byline=byline,
@@ -100,11 +108,11 @@ def _pick_byline_block(blocks: list[TextBlock]) -> TextBlock | None:
     return None
 
 
-def _extract_date(text: str) -> str:
+def _extract_date(text: str) -> str | None:
     match = re.search(r"\b(\d{2}/\d{2}/\d{4})\b", text)
     if match:
         return match.group(1)
-    raise ValueError("Could not find publication date in PDF text.")
+    return None
 
 
 def _extract_byline(text: str) -> str:
@@ -196,3 +204,14 @@ def slugify(text: str) -> str:
 def yyyymmdd(date_mmddyyyy: str) -> str:
     month, day, year = date_mmddyyyy.split("/")
     return f"{year}{month}{day}"
+
+
+def _extract_date_prefix_from_filename(filename_stem: str) -> str | None:
+    match = re.match(r"(?P<year>\d{4})-?(?P<month>\d{2})-?(?P<day>\d{2})(?:\b|[-_])", filename_stem)
+    if not match:
+        return None
+    return f"{match.group('year')}{match.group('month')}{match.group('day')}"
+
+
+def _mmddyyyy(date_prefix: str) -> str:
+    return f"{date_prefix[4:6]}/{date_prefix[6:8]}/{date_prefix[0:4]}"
